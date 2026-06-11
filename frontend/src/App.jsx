@@ -169,7 +169,8 @@ export default function App() {
   const [dataRows, setDataRows] = useState([]);
   const [ribbonBlocks, setRibbonBlocks] = useState([]);
 
-  const API_BASE = 'http://localhost:5000/api/config';
+  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  const API_BASE = `${API_URL}/api/config`;
   const socketRef = useRef(null);
   const isServerDown = useRef(false);
 
@@ -186,7 +187,7 @@ export default function App() {
     // Only connect WebSocket after authentication
     if (!isAuthenticated) return;
 
-    socketRef.current = io('http://localhost:5000');
+    socketRef.current = io(API_URL);
 
     socketRef.current.on('connect', () => {
       console.log('Connected to backend WebSocket');
