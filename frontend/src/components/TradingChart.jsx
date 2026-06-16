@@ -286,19 +286,28 @@ export default function TradingChart({ chartData, isVisible }) {
     const emaBearishSeries = emaBearishSeriesRef.current;
 
     // Helper for time token sanitization
-    const sanitizeDataArray = (incomingData) => incomingData.map(item => {
-      let rawTime = item.time;
-      if (typeof rawTime === 'string') {
-        rawTime = Math.floor(new Date(rawTime).getTime() / 1000);
-      }
-      if (typeof rawTime === 'number' && rawTime > 10000000000) {
-        rawTime = Math.floor(rawTime / 1000);
-      }
-      return {
-        ...item,
-        time: rawTime
-      };
-    });
+    const sanitizeDataArray = (incomingData) => {
+      const sanitized = incomingData.map(item => {
+        let rawTime = item.time;
+        if (typeof rawTime === 'string') {
+          rawTime = Math.floor(new Date(rawTime).getTime() / 1000);
+        }
+        if (typeof rawTime === 'number' && rawTime > 10000000000) {
+          rawTime = Math.floor(rawTime / 1000);
+        }
+        return {
+          ...item,
+          time: rawTime
+        };
+      });
+
+      const sortedData = sanitized.sort((a, b) => a.time - b.time);
+      const uniqueSortedData = sortedData.filter((item, index, self) => 
+        index === 0 || item.time !== self[index - 1].time
+      );
+
+      return uniqueSortedData;
+    };
 
     const sanitizedOhlcv = sanitizeDataArray(chartData.ohlcv);
     const sanitizedEmaBullish = sanitizeDataArray(chartData.emaBullish || []);
