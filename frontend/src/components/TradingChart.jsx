@@ -413,7 +413,7 @@ export default function TradingChart({ chartData, isVisible }) {
             style={srStyles.supply}
           >
             <span className="text-[12px] font-black text-white bg-[#0c0d14]/70 px-2 py-0.5 rounded-xs tracking-wider uppercase">
-              Vol: -5147824
+              Vol: {chartData?.srZones?.supply?.vol || -5147824}
             </span>
           </div>
 
@@ -423,7 +423,7 @@ export default function TradingChart({ chartData, isVisible }) {
             style={srStyles.demand}
           >
             <span className="text-[12px] font-black text-white bg-[#0c0d14]/70 px-2 py-0.5 rounded-xs tracking-wider uppercase">
-              Vol: 11618865
+              Vol: {chartData?.srZones?.demand?.vol || 11618865}
             </span>
           </div>
         </>

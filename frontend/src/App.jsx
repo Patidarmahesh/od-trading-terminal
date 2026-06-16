@@ -8,134 +8,7 @@ import {
   BottomRightPanel,
   BottomRibbonPanel
 } from './components/Panels';
-
-// Local math generator fallback matching backend exactly (active if server down)
-function generateLocalFallbackData(config) {
-  const count = 130;
-  const data = [];
-  let currentPrice = 25280;
-  let baseTime = new Date('2026-05-10');
-
-  for (let i = 0; i < count; i++) {
-    let change = (Math.random() - 0.5) * 20;
-    
-    if (i < 40) change -= 4;
-    else if (i >= 40 && i < 60) change += (Math.random() - 0.5) * 10;
-    else if (i >= 60 && i < 90) change += 9;
-    else if (i >= 90 && i < 115) change -= 12;
-    else change += 3;
-
-    const open = currentPrice;
-    const close = open + change;
-    const high = Math.max(open, close) + Math.random() * 8;
-    const low = Math.min(open, close) - Math.random() * 8;
-    
-    currentPrice = close;
-    const timestamp = Math.floor(baseTime.getTime() / 1000) + (i * 30 * 60);
-
-    data.push({
-      time: timestamp,
-      open: parseFloat(open.toFixed(2)),
-      high: parseFloat(high.toFixed(2)),
-      low: parseFloat(low.toFixed(2)),
-      close: parseFloat(close.toFixed(2)),
-      volume: Math.floor(Math.random() * 3000000) + 1000000,
-      isSideways: false
-    });
-  }
-
-  const triggerIndex = 90;
-  if (data[triggerIndex]) {
-    data[triggerIndex].open = 25290.00;
-    data[triggerIndex].high = 25305.00;
-    data[triggerIndex].low = 25260.00;
-    data[triggerIndex].close = 25273.75;
-  }
-
-  const buyArrowIndex = 68;
-  if (data[buyArrowIndex]) {
-    data[buyArrowIndex].open = 25160.00;
-    data[buyArrowIndex].close = 25195.00;
-  }
-
-  const lastIndex = count - 1;
-  if (data[lastIndex]) {
-    data[lastIndex].close = 25233.80;
-  }
-
-  const rangeSize = config.rangeSize || 3.5;
-  for (let i = 0; i < data.length; i++) {
-    const isSidewaysZone = (i >= 32 && i <= 58);
-    if (isSidewaysZone && rangeSize > 2.0) {
-      data[i].isSideways = true;
-    }
-  }
-
-  const emaLength = config.length || 50;
-  const emaAlpha = 2 / (emaLength + 1);
-  let currentEma = data[0].close;
-  const emaBullish = [];
-  const emaBearish = [];
-
-  for (let i = 0; i < data.length; i++) {
-    const val = data[i][config.src.toLowerCase()] || data[i].close;
-    currentEma = val * emaAlpha + currentEma * (1 - emaAlpha);
-    const emaVal = parseFloat(currentEma.toFixed(2));
-    const isBullish = (i >= 62 && i <= 90);
-
-    if (isBullish) {
-      emaBullish.push({ time: data[i].time, value: emaVal });
-      if (i === 62 || i === 90) {
-        emaBearish.push({ time: data[i].time, value: emaVal });
-      } else {
-        emaBearish.push({ time: data[i].time });
-      }
-    } else {
-      emaBearish.push({ time: data[i].time, value: emaVal });
-      if (i === 61 || i === 91) {
-        emaBullish.push({ time: data[i].time, value: emaVal });
-      } else {
-        emaBullish.push({ time: data[i].time });
-      }
-    }
-  }
-
-  const supplyZone = {
-    top: 25390,
-    bottom: 25345,
-    vol: -5147824,
-    startTime: data[88].time,
-    endTime: data[112].time
-  };
-  const demandZone = {
-    top: 25215,
-    bottom: 25165,
-    vol: 11618865,
-    startTime: data[48].time,
-    endTime: data[112].time
-  };
-
-  return {
-    ohlcv: data,
-    emaBullish,
-    emaBearish,
-    srZones: { supply: supplyZone, demand: demandZone },
-    signal: {
-      time: data[triggerIndex].time,
-      entry: 25273.75,
-      sl: 25324.30,
-      tp1: 25223.20,
-      tp2: 25172.65,
-      tp3: 25122.10,
-      tp4: 25071.55,
-      high: data[triggerIndex].high
-    },
-    buyArrow: {
-      time: data[buyArrowIndex].time,
-      price: data[buyArrowIndex].low
-    }
-  };
-}
+import PaperTradeDashboard from './components/PaperTradeDashboard';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -163,6 +36,7 @@ export default function App() {
   const [activeAsset, setActiveAsset] = useState({ name: 'NIFTY 50 INDEX', symbol: 'NIFTY', badge: '5 • NSE' });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isIndicatorVisible, setIsIndicatorVisible] = useState(true);
+  const [isPaperDashboardOpen, setIsPaperDashboardOpen] = useState(false);
 
   // Dynamic Panels States
   const [screenerItems, setScreenerItems] = useState([]);
@@ -173,6 +47,8 @@ export default function App() {
   const API_BASE = `${API_URL}/api/config`;
   const socketRef = useRef(null);
   const isServerDown = useRef(false);
+  const lastTickTime = useRef(Date.now());
+  const [isDisconnected, setIsDisconnected] = useState(false);
 
   // Handle window resize dynamically to strictly separate laptop and mobile DOM trees
   useEffect(() => {
@@ -205,6 +81,8 @@ export default function App() {
     });
 
     socketRef.current.on('tick', (payload) => {
+      lastTickTime.current = Date.now();
+      if (isDisconnected) setIsDisconnected(false);
       if (payload.chartData) setChartData(payload.chartData);
       if (payload.config) setConfig(payload.config);
       if (payload.activeAsset) setActiveAsset(payload.activeAsset);
@@ -222,71 +100,58 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
-  const handleSwitchAsset = (assetKey) => {
-    if (socketRef.current && socketRef.current.connected) {
-      socketRef.current.emit('SWITCH_ASSET', assetKey);
-      setChartData(null); // Trigger loading screen momentarily while canvas wipes
-    }
-  };
-
-  const fallbackTrendCounter = useRef(0);
-  const fallbackCandleCounter = useRef(0);
-  const fallbackTrend = useRef('SELL');
-
-  // Continuous fallback loop: updates locally every 1 second if server is down
   useEffect(() => {
     if (!isAuthenticated) return;
-
-    const fallbackInterval = setInterval(() => {
-      if (isServerDown.current) {
-        setChartData(prev => {
-          if (prev) {
-            const ohlcv = [...prev.ohlcv];
-            const lastIdx = ohlcv.length - 1;
-            const lastCandle = { ...ohlcv[lastIdx] };
-            
-            fallbackTrendCounter.current++;
-            fallbackCandleCounter.current++;
-
-            if (fallbackTrendCounter.current >= 240) {
-              fallbackTrendCounter.current = 0;
-              fallbackTrend.current = fallbackTrend.current === 'SELL' ? 'BUY' : 'SELL';
-            }
-
-            if (fallbackCandleCounter.current >= 15) {
-              fallbackCandleCounter.current = 0;
-              const nextTime = lastCandle.time + 1800;
-
-              ohlcv.shift();
-              ohlcv.push({
-                time: nextTime,
-                open: lastCandle.close,
-                high: lastCandle.close,
-                low: lastCandle.close,
-                close: lastCandle.close,
-                volume: Math.floor(Math.random() * 2000000) + 1000000,
-                isSideways: false
-              });
-            } else {
-              const bias = fallbackTrend.current === 'SELL' ? -1.8 : 1.8;
-              const noise = (Math.random() - 0.5) * 8;
-              const tickChange = bias + noise;
-              
-              lastCandle.close = parseFloat((lastCandle.close + tickChange).toFixed(2));
-              lastCandle.high = parseFloat(Math.max(lastCandle.high, lastCandle.close).toFixed(2));
-              lastCandle.low = parseFloat(Math.min(lastCandle.low, lastCandle.close).toFixed(2));
-              ohlcv[lastIdx] = lastCandle;
-            }
-
-            return { ...prev, ohlcv, currentTrend: fallbackTrend.current };
-          }
-          return generateLocalFallbackData(config);
-        });
+    const interval = setInterval(() => {
+      if (Date.now() - lastTickTime.current > 10000) {
+        setIsDisconnected(true);
       }
-    }, 1000);
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated]);
 
-    return () => clearInterval(fallbackInterval);
-  }, [config, isAuthenticated]);
+  const handleSwitchAsset = (assetKey) => {
+    const symbolMap = {
+      'NIFTY': 'NSE:NIFTY50-INDEX',
+      'BANKNIFTY': 'NSE:NIFTYBANK-INDEX',
+      'FINNIFTY': 'NSE:FINNIFTY-INDEX',
+      'MIDCAPNIFTY': 'NSE:MIDCPNIFTY-INDEX'
+    };
+
+    const newBrokerSymbol = symbolMap[assetKey];
+    const oldBrokerSymbol = symbolMap[activeAsset?.symbol || 'NIFTY'];
+
+    if (socketRef.current && socketRef.current.connected) {
+      // 1. Unsubscribe from old live stream
+      if (oldBrokerSymbol) {
+        socketRef.current.emit('unsubscribe', oldBrokerSymbol);
+      }
+      
+      // 2. Subscribe to new live stream
+      if (newBrokerSymbol) {
+        socketRef.current.emit('subscribe', newBrokerSymbol);
+      }
+      
+      // Keep legacy emit to trigger historical fetch on backend if needed
+      socketRef.current.emit('SWITCH_ASSET', assetKey);
+      
+      // 3. State Refresh - clear canvas for seamless loading state
+      setChartData(null);
+
+      // Pre-emptively switch the UI activeAsset to avoid lag
+      const availableAssets = [
+        { key: 'NIFTY', name: 'NIFTY 50 INDEX', badge: '5 • NSE', decimals: 2, volMultiplier: 3 },
+        { key: 'BANKNIFTY', name: 'NIFTY BANK INDEX', badge: '15 • NSE', decimals: 2, volMultiplier: 5 },
+        { key: 'FINNIFTY', name: 'NIFTY FIN SERVICE', badge: '5 • NSE', decimals: 2, volMultiplier: 4 },
+        { key: 'MIDCAPNIFTY', name: 'NIFTY MIDCAP 100', badge: '5 • NSE', decimals: 2, volMultiplier: 4 }
+      ];
+      
+      const newAssetMeta = availableAssets.find(a => a.key === assetKey);
+      if (newAssetMeta) {
+        setActiveAsset({ ...newAssetMeta, symbol: assetKey });
+      }
+    }
+  };
 
   const activeScreenerItems = chartData?.screenerItems || screenerItems;
   const activeDataRows = chartData?.dataRows || dataRows;
@@ -312,12 +177,8 @@ export default function App() {
 
     if (isAbsoluteBearish) {
       ribbonBgClass = 'bg-[#ff2a54] text-white shadow-[0_-4px_10px_rgba(255,42,84,0.3)]';
-      // Completely override any mixed array data with a single solid red block
-      dynamicRibbonBlocks = [{ color: '#ff2a54', styleWidth: '100%' }];
     } else if (isAbsoluteBullish) {
       ribbonBgClass = 'bg-[#00e676] text-black font-bold shadow-[0_-4px_10px_rgba(0,230,118,0.3)]';
-      // Completely override any mixed array data with a single solid green block
-      dynamicRibbonBlocks = [{ color: '#00e676', styleWidth: '100%' }];
     }
   }
 
@@ -404,6 +265,12 @@ export default function App() {
   return (
     <div className="relative w-full h-screen bg-[#0b0e11] overflow-hidden font-sans select-none text-white">
       
+      {isDisconnected && (
+        <div className="absolute top-0 left-0 w-full bg-[#ff2a54] text-white text-center py-1.5 z-50 font-black tracking-widest text-xs uppercase shadow-[0_4px_10px_rgba(255,42,84,0.5)]">
+          CONNECTION LOST! Live data stream interrupted.
+        </div>
+      )}
+      
       {/* 100% FULL-SCREEN CHART CANVAS WRAPPER */}
       <div className="absolute inset-0 w-full h-full z-10">
         {chartData ? (
@@ -419,15 +286,18 @@ export default function App() {
       <div className="absolute top-4 left-4 z-30 w-[280px] flex flex-col gap-4 pointer-events-none">
         
         {/* NiftyFifty Panel Wrapper */}
-        <div className="pointer-events-auto bg-[#0c1013]/90 backdrop-blur-sm border border-gray-800 p-3 rounded-lg shadow-2xl">
-          <TopLeftPanel
-            isVisible={isIndicatorVisible}
+        <div className="pointer-events-auto bg-[#0c1013]/90 backdrop-blur-sm border border-gray-800 p-0 rounded-lg shadow-2xl">
+          <TopLeftPanel 
+            isVisible={isIndicatorVisible} 
             onToggleVisibility={() => setIsIndicatorVisible(!isIndicatorVisible)}
             onOpenSettings={() => setIsModalOpen(true)}
-            onDelete={handleDeleteIndicator}
+            onDelete={() => console.log('Delete active')}
             chartData={chartData}
             activeAsset={activeAsset}
             onSwitchAsset={handleSwitchAsset}
+            isPaperTrading={config.isPaperTrading || false}
+            onTogglePaperTrading={() => handleSaveSettings({ ...config, isPaperTrading: !config.isPaperTrading })}
+            onOpenPaperDashboard={() => setIsPaperDashboardOpen(true)}
           />
         </div>
 
@@ -444,9 +314,16 @@ export default function App() {
       </div>
 
       {/* LIVE BOTTOM RIBBON SENTIMENT CONDITIONAL COLOR */}
-      <div className={`absolute bottom-0 left-0 right-0 h-9 z-30 border-t border-gray-800 ${ribbonBgClass}`}>
-        <BottomRibbonPanel blocks={dynamicRibbonBlocks} />
+      <div className={`absolute bottom-0 left-0 right-0 h-[44px] z-30 border-t border-gray-800 ${ribbonBgClass}`}>
+        <BottomRibbonPanel blocks={dynamicRibbonBlocks} chartData={chartData} />
       </div>
+
+      <PaperTradeDashboard 
+        isOpen={isPaperDashboardOpen} 
+        onClose={() => setIsPaperDashboardOpen(false)} 
+        currentPrice={chartData?.ohlcv?.length ? chartData.ohlcv[chartData.ohlcv.length - 1].close : (activeAsset?.basePrice || 25237.00)}
+        activeAsset={activeAsset}
+      />
 
       <SettingsModal
         isOpen={isModalOpen}

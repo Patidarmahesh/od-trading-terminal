@@ -7,7 +7,7 @@ export default function SettingsModal({ isOpen, onClose, currentSettings, onSave
 
   if (!isOpen) return null;
 
-  const tabs = ['Inputs', 'Properties', 'Style', 'Visibility'];
+  const tabs = ['Inputs', 'Properties', 'Style', 'Visibility', 'Broker'];
 
   const handleChange = (key, value) => {
     setSettings((prev) => ({
@@ -94,6 +94,23 @@ export default function SettingsModal({ isOpen, onClose, currentSettings, onSave
                   <option value="OD SOFT">OD SOFT</option>
                   <option value="OD SOFT 2">OD SOFT 2</option>
                 </select>
+              </div>
+
+              {/* Paper Trading Mode */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+                  Trading Mode
+                </label>
+                <label htmlFor="isPaperTrading" className="flex items-center gap-2 text-[12px] text-white font-medium cursor-pointer bg-[#2a2e39] border border-[#363c4e] px-3 py-2 h-[38px] transition-all">
+                  <input
+                    id="isPaperTrading"
+                    type="checkbox"
+                    checked={settings.isPaperTrading || false}
+                    onChange={(e) => handleChange('isPaperTrading', e.target.checked)}
+                    className="w-4 h-4 bg-[#131722] border border-[#363c4e] rounded-none text-[#ff9800] focus:ring-0 cursor-pointer"
+                  />
+                  <span className={settings.isPaperTrading ? 'text-[#ff9800] font-black' : ''}>Virtual / Paper Trading</span>
+                </label>
               </div>
 
               {/* Show S&R */}
@@ -224,6 +241,77 @@ export default function SettingsModal({ isOpen, onClose, currentSettings, onSave
                   onChange={(e) => handleChange('rangePeriod', parseInt(e.target.value) || 0)}
                   className="w-full bg-[#2a2e39] border border-[#363c4e] text-white rounded-none px-3 py-2 text-[12px] font-medium outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] transition-all"
                 />
+              </div>
+            </div>
+          ) : activeTab === 'Broker' ? (
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-[11px]">
+              <div className="col-span-2 border-b border-[#2a2e39] pb-1 mt-1 text-[11px] font-black text-[#00e5ff] uppercase tracking-widest">
+                Fyers API Configuration
+              </div>
+
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+                  Fyers App ID
+                </label>
+                <input
+                  type="text"
+                  value={settings.fyersAppId || ''}
+                  onChange={(e) => handleChange('fyersAppId', e.target.value)}
+                  placeholder="Enter your Fyers App ID (e.g. ABCDEFGH-100)"
+                  className="w-full bg-[#2a2e39] border border-[#363c4e] text-white rounded-none px-3 py-2 text-[12px] font-medium outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] transition-all"
+                />
+              </div>
+
+              <div className="col-span-2 flex flex-col gap-1.5">
+                <label className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+                  Fyers Secret ID
+                </label>
+                <input
+                  type="password"
+                  value={settings.fyersSecretId || ''}
+                  onChange={(e) => handleChange('fyersSecretId', e.target.value)}
+                  placeholder="Enter your Fyers Secret ID"
+                  className="w-full bg-[#2a2e39] border border-[#363c4e] text-white rounded-none px-3 py-2 text-[12px] font-medium outline-none focus:border-[#2962FF] focus:ring-1 focus:ring-[#2962FF] transition-all"
+                />
+              </div>
+
+              <div className="col-span-2 flex gap-3 mt-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                      const res = await fetch(`${API_URL}/api/broker/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          fyersAppId: settings.fyersAppId,
+                          fyersSecretId: settings.fyersSecretId
+                        })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        alert('Broker configuration saved successfully!');
+                        onSave(settings);
+                      } else {
+                        alert('Failed to save config: ' + data.message);
+                      }
+                    } catch (err) {
+                      alert('Error connecting to backend');
+                    }
+                  }}
+                  className="flex-1 py-2 bg-[#2962FF] hover:bg-[#1a56db] text-white rounded-none font-bold transition-all uppercase tracking-wider text-xs cursor-pointer shadow-md"
+                >
+                  Save Broker Config
+                </button>
+                <button
+                  onClick={() => {
+                    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+                    window.location.href = `${API_URL}/api/auth/fyers`;
+                  }}
+                  className="flex-1 py-2 bg-[#00E676] hover:bg-[#00c853] text-black rounded-none font-bold transition-all uppercase tracking-wider text-xs cursor-pointer shadow-md"
+                >
+                  Connect Fyers
+                </button>
               </div>
             </div>
           ) : (

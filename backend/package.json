@@ -11,6 +11,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "fyers-api-v3": "^1.9.0",
     "mongoose": "^8.3.1",
     "socket.io": "^4.8.3"
   }

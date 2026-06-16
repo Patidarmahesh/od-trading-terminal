@@ -49,6 +49,18 @@ const configSchema = new mongoose.Schema({
   isSideways: {
     type: Boolean,
     default: false
+  },
+  fyersAppId: {
+    type: String,
+    default: ''
+  },
+  fyersSecretId: {
+    type: String,
+    default: ''
+  },
+  fyersAccessToken: {
+    type: String,
+    default: ''
   }
 }, { timestamps: true });
 
