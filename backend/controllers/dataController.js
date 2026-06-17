@@ -677,7 +677,8 @@ export const fyersAuth = async (req, res) => {
         );
     }
 
-    const redirectUri = `${process.env.VITE_API_URL || "http://localhost:5000"}/api/auth/fyers/callback`;
+    const backendBaseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+    const redirectUri = `${backendBaseUrl}/api/auth/fyers/callback`;
     const fyersUrl = `https://api-t1.fyers.in/api/v3/generate-authcode?client_id=${appId}&redirect_uri=${redirectUri}&response_type=code&state=auth`;
 
     res.redirect(fyersUrl);
@@ -708,7 +709,8 @@ export const fyersAuthCallback = async (req, res) => {
       .createHash("sha256")
       .update(`${appId}:${secretId}`)
       .digest("hex");
-    const redirectUri = `${process.env.VITE_API_URL || "http://localhost:5000"}/api/auth/fyers/callback`;
+    const backendBaseUrl = process.env.BACKEND_URL || "http://localhost:5000";
+    const redirectUri = `${backendBaseUrl}/api/auth/fyers/callback`;
 
     const response = await fetch(
       "https://api-t1.fyers.in/api/v3/validate-authcode",
