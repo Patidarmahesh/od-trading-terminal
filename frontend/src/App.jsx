@@ -48,7 +48,7 @@ export default function App() {
   const socketRef = useRef(null);
   const isServerDown = useRef(false);
   const lastTickTime = useRef(Date.now());
-  const [isDisconnected, setIsDisconnected] = useState(false);
+  const [socketStatus, setSocketStatus] = useState('connected');
 
   // Handle window resize dynamically to strictly separate laptop and mobile DOM trees
   useEffect(() => {
@@ -82,10 +82,13 @@ export default function App() {
 
     socketRef.current.on('tick', (payload) => {
       lastTickTime.current = Date.now();
-      if (isDisconnected) setIsDisconnected(false);
       if (payload.chartData) setChartData(payload.chartData);
       if (payload.config) setConfig(payload.config);
       if (payload.activeAsset) setActiveAsset(payload.activeAsset);
+    });
+
+    socketRef.current.on('socket_status', (status) => {
+      setSocketStatus(status);
     });
 
     socketRef.current.on('connect_error', () => {
@@ -100,15 +103,7 @@ export default function App() {
     };
   }, [isAuthenticated]);
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    const interval = setInterval(() => {
-      if (Date.now() - lastTickTime.current > 10000) {
-        setIsDisconnected(true);
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
+  // The backend now automatically emits socket_status for disconnect/reconnect
 
   const handleSwitchAsset = (assetKey) => {
     const symbolMap = {
@@ -265,7 +260,7 @@ export default function App() {
   return (
     <div className="relative w-full h-screen bg-[#0b0e11] overflow-hidden font-sans select-none text-white">
       
-      {isDisconnected && (
+      {socketStatus === 'connection_lost' && (
         <div className="absolute top-0 left-0 w-full bg-[#ff2a54] text-white text-center py-1.5 z-50 font-black tracking-widest text-xs uppercase shadow-[0_4px_10px_rgba(255,42,84,0.5)]">
           CONNECTION LOST! Live data stream interrupted.
         </div>
