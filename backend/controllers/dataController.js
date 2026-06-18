@@ -366,6 +366,11 @@ const fetchFyersHistory = async (symbol) => {
   }
 };
 
+let reconnectTimer = null;
+let reconnectAttempts = 0;
+let pingInterval = null;
+let isReconnecting = false;
+
 const startFyersSocket = () => {
   if (!activeConfig.fyersAppId || !activeConfig.fyersAccessToken) {
     console.warn("Fyers AppId or AccessToken missing. Socket won't start.");
@@ -379,6 +384,24 @@ const startFyersSocket = () => {
 
     fds.on("connect", () => {
       console.log("Connected to Fyers Data Socket");
+      
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      reconnectAttempts = 0;
+      
+      if (pingInterval) clearInterval(pingInterval);
+      pingInterval = setInterval(() => {
+        console.log("[WebSocket] Heartbeat Ping");
+      }, 10000);
+
+      if (isReconnecting) {
+        if (ioInstance) {
+          ioInstance.emit("socket_status", "connected");
+        }
+        console.log("[WebSocket] Reconnected. Backfilling missing data...");
+        initializeFyersData().catch(err => console.error("Backfill failed:", err));
+        isReconnecting = false;
+      }
+
       const symbolsToSub = [
         activeAsset.fyersSymbol,
         ...SCREENER_SYMBOLS.map((s) => s.fyers),
@@ -471,16 +494,36 @@ const startFyersSocket = () => {
       }
     });
 
+    const handleDisconnect = () => {
+      if (pingInterval) clearInterval(pingInterval);
+      if (!isReconnecting) {
+        isReconnecting = true;
+        if (ioInstance) {
+          ioInstance.emit("socket_status", "connection_lost");
+        }
+      }
+
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      const delay = Math.min(2000 * Math.pow(2, reconnectAttempts), 10000);
+      reconnectAttempts++;
+      console.log(`[WebSocket] Connection lost. Attempting reconnect #${reconnectAttempts} in ${delay}ms...`);
+      
+      reconnectTimer = setTimeout(() => {
+        startFyersSocket();
+      }, delay);
+    };
+
     fds.on("error", (err) => {
       console.error("Fyers WebSocket Error:", err);
+      handleDisconnect();
     });
 
     fds.on("close", () => {
       console.log("Fyers WebSocket Closed");
+      handleDisconnect();
     });
 
     fds.connect();
-    fds.autoreconnect();
     fyersSocketInstance = fds;
   } catch (err) {
     console.error("Failed to initialize Fyers Socket:", err);
