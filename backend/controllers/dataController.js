@@ -1,5 +1,6 @@
 import Config from "../models/configModel.js";
 import crypto from "crypto";
+import mongoose from "mongoose";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const fyersModel = require("fyers-api-v3").fyersModel;
@@ -513,8 +514,36 @@ const startFyersSocket = () => {
       }, delay);
     };
 
-    fds.on("error", (err) => {
+    fds.on("error", async (err) => {
       console.error("Fyers WebSocket Error:", err);
+      const errMsg = typeof err === 'string' ? err : JSON.stringify(err);
+      
+      // Handle expired or invalid tokens permanently
+      if (errMsg.includes("expired token") || errMsg.includes("authenticate") || errMsg.includes("jwt")) {
+        console.warn("Fyers Session Expired. Clearing token...");
+        activeConfig.fyersAccessToken = "";
+        if (dbConnected) {
+          try {
+            const configObj = await Config.findOne();
+            if (configObj) {
+              configObj.fyersAccessToken = "";
+              await configObj.save();
+            }
+            // Auto-cleanup for standard Atlas sessions
+            const client = mongoose.connection.client;
+            if (client) {
+              await client.db('sample_mflix').collection('sessions').deleteMany({});
+            }
+          } catch (e) {
+            console.error("Failed to clear expired token in DB:", e);
+          }
+        }
+        if (ioInstance) {
+          ioInstance.emit("socket_status", "session_expired");
+        }
+        return; // Halt reconnection loops
+      }
+
       handleDisconnect();
     });
 

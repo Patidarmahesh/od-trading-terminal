@@ -10,6 +10,19 @@ import {
 } from './components/Panels';
 import PaperTradeDashboard from './components/PaperTradeDashboard';
 
+const isTokenExpired = (token) => {
+  try {
+    if (!token) return true;
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+    const { exp } = JSON.parse(jsonPayload);
+    return Date.now() >= exp * 1000; // Returns true if expired
+  } catch (e) {
+    return true;
+  }
+};
+
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loginUsername, setLoginUsername] = useState('');
@@ -89,6 +102,9 @@ export default function App() {
 
     socketRef.current.on('socket_status', (status) => {
       setSocketStatus(status);
+      if (status === 'session_expired') {
+        setConfig(prev => ({ ...prev, fyersAccessToken: "" }));
+      }
     });
 
     socketRef.current.on('connect_error', () => {
@@ -257,6 +273,22 @@ export default function App() {
     );
   }
 
+  const hasAccessToken = !!(config?.fyersAccessToken && !isTokenExpired(config.fyersAccessToken));
+
+  // FIXED: Strict bypass check for null, undefined, empty, or string "null"/"undefined"
+const hasAccessTokenn = !!(
+  config && 
+  config.fyersAccessToken && 
+  config.fyersAccessToken !== "null" && 
+  config.fyersAccessToken !== "undefined" && 
+  config.fyersAccessToken.trim() !== ""
+);
+
+// Debugging ke liye taaki console mein sachai dikhe
+// console.log("👉 REAL TOKEN VALUE IN FRONTEND:", config?.fyersAccessToken);
+// console.log("👉 IS ACCESS TOKEN VALID FOR UI?:", hasAccessTokenn);
+  
+
   return (
     <div className="relative w-full h-screen bg-[#0b0e11] overflow-hidden font-sans select-none text-white">
       
@@ -268,7 +300,18 @@ export default function App() {
       
       {/* 100% FULL-SCREEN CHART CANVAS WRAPPER */}
       <div className="absolute inset-0 w-full h-full z-10">
-        {chartData ? (
+        {(!hasAccessToken || socketStatus === "connection_lost") ? (
+          <div className="w-full h-full flex items-center justify-center bg-[#0b0e11]/80 backdrop-blur-md">
+            <div className="text-center bg-[#161a1e]/90 border border-[#2962ff]/30 p-10 rounded shadow-[0_0_40px_rgba(41,98,255,0.15)] flex flex-col items-center max-w-lg">
+              <div className="w-16 h-1 bg-[#2962ff] mb-6 shadow-[0_0_20px_#2962ff] rounded-full animate-pulse"></div>
+              <h2 className="text-2xl font-black tracking-widest text-[#00e5ff] uppercase mb-4">Welcome to OD SOFTWARE 2026</h2>
+              <p className="text-gray-400 font-medium text-sm leading-relaxed mb-6">
+                👉 Please click the Settings (⚙️) icon in the top panel, go to 'Broker Config', and click 'Connect Fyers' to unlock live charts and analytics.
+              </p>
+              <div className="w-2 h-2 rounded-full bg-[#ff2a54] animate-ping"></div>
+            </div>
+          </div>
+        ) : chartData ? (
           <TradingChart chartData={chartData} isVisible={isIndicatorVisible} />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-sm font-semibold text-gray-500 tracking-wider">
